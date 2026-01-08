@@ -10,29 +10,37 @@ namespace ResolutionsApi.Controllers;
 public class ResolutionsController : ControllerBase
 {
     // ===================== GET ALL =====================
+    // Supports query: ?filter=all|active|done
     [HttpGet]
-    public IActionResult GetAll([FromQuery] string? isDone, [FromQuery] string? title)
+    public IActionResult GetAll([FromQuery] string? filter, [FromQuery] string? title)
     {
         var items = ResolutionStore.Resolutions.AsEnumerable();
 
-        // Filter by isDone
-        if (!string.IsNullOrEmpty(isDone))
+        // Filter by status
+        if (!string.IsNullOrWhiteSpace(filter))
         {
-            if (!bool.TryParse(isDone, out bool done))
+            filter = filter.ToLower();
+            if (filter == "active")
+            {
+                items = items.Where(r => !r.IsDone);
+            }
+            else if (filter == "done")
+            {
+                items = items.Where(r => r.IsDone);
+            }
+            else if (filter != "all")
             {
                 return BadRequest(ErrorResponse.BadRequest(
                     "Validation failed.",
-                    "isDone must be true or false"
+                    "filter must be one of: all, active, done"
                 ));
             }
-            items = items.Where(r => r.IsDone == done);
         }
 
         // Search by title
         if (!string.IsNullOrWhiteSpace(title))
         {
-            items = items.Where(r =>
-                r.Title.Contains(title, StringComparison.OrdinalIgnoreCase));
+            items = items.Where(r => r.Title.Contains(title, StringComparison.OrdinalIgnoreCase));
         }
 
         return Ok(new
@@ -62,7 +70,8 @@ public class ResolutionsController : ControllerBase
             id = resolution.Id,
             title = resolution.Title,
             isDone = resolution.IsDone,
-            createdAt = resolution.CreatedAt
+            createdAt = resolution.CreatedAt,
+            updatedAt = resolution.UpdatedAt
         });
     }
 
@@ -72,10 +81,7 @@ public class ResolutionsController : ControllerBase
     {
         if (input == null || string.IsNullOrWhiteSpace(input.Title))
         {
-            return BadRequest(ErrorResponse.BadRequest(
-                "Validation failed.",
-                "title is required"
-            ));
+            return BadRequest(ErrorResponse.BadRequest("Validation failed.", "title is required"));
         }
 
         var resolution = new Resolution
@@ -95,7 +101,6 @@ public class ResolutionsController : ControllerBase
     [HttpPut("{id}")]
     public IActionResult Update(int id, [FromBody] Resolution input)
     {
-        // Validation
         if (id <= 0)
             return BadRequest(ErrorResponse.BadRequest("Validation failed.", "route id must be greater than 0"));
 
@@ -113,7 +118,6 @@ public class ResolutionsController : ControllerBase
         if (resolution == null)
             return NotFound(ErrorResponse.NotFound("Resolution not found", $"id: {id}"));
 
-        // Update
         resolution.Title = input.Title.Trim();
         resolution.IsDone = input.IsDone;
         resolution.UpdatedAt = DateTime.UtcNow;
